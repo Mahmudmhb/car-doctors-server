@@ -1,19 +1,27 @@
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken')
 const app = express()
 require('dotenv').config()
-app.use(cors())
-app.use(express.json())
+const cookieParser = require('cookie-parser');
+
 const port = process.env.PORT || 5000;
 
 
+app.use(cors({
+  origin:'*',
+  credentials: true,
+}))
+app.use(express.json())
+app.use(cookieParser())
 
 
 
 
 
 
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
 const uri = `mongodb+srv://${process.env.SRC_USER}:${process.env.SECRET_KEY}@cluster0.gegfn.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -24,6 +32,33 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
+
+
+
+
+const logger = async(req, res, next) =>{
+  console.log('called', req.host, req.originalUrl)
+  next()
+}
+
+
+const verifyToken = async(req, res, next)=>{
+  const token = req.cookies?.token;
+  // console.log('value of ', token)
+  if(!token){
+    return res.status(401).send({message: 'not authorrized'})
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET,(err, decoded)=>{
+    console.log(process.env.ACCESS_TOKEN_SECRET)
+    if(err){
+      console.log(err)
+      // return res.status(401).send({message: 'unAuthorized'})
+    }
+    console.log('value in the token', decoded)
+    next()
+  })
+}
 
 async function run() {
   try {
@@ -38,13 +73,30 @@ const CarDoctorsDB = client.db('CarDoctorsDB').collection('services');
 const CheckOut = client.db('CarDoctorsDB').collection("orders");
 
 
-app.post('/checkout', async(req, res)=>{
+
+// auth related api
+app.post('/jwt', logger, async(req, res)=>{
+  const user = req.body;
+  console.log(user)
+  const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET,{ expiresIn: '5h' })
+ res
+ .cookie('token',  token,{
+  httpOnly: true,
+  secure: false,
+  // sameSite: 'none'
+ })
+ .send({success: true})
+})
+
+
+// services relate api
+app.post('/checkout',async(req, res)=>{
   const order = req.body;
   const result = await CheckOut.insertOne(order)
   res.send(result)
 
 })
-app.get('/checkout/:id', async(req, res)=>{
+app.get('/checkout/:id',async(req, res)=>{
   const id = req.params.id;
   // console.log(id)
   const cursor = {_id: new ObjectId(id)}
@@ -82,8 +134,9 @@ app.patch('/checkout/:id', async(req, res)=>{
 //   res.send(cursor)
 // })
 
-app.get('/checkout', async(req, res)=>{
+app.get('/checkout',verifyToken, logger,async(req, res)=>{
   // console.log('find email',req.query)
+  // console.log('tok tok tok', req.cookies.token)
   let query ={};
   if(req.query?.email){
     query ={ email : req.query.email}
@@ -91,7 +144,7 @@ app.get('/checkout', async(req, res)=>{
   const result = await CheckOut.find(query).toArray()
   res.send(result)
 } )
-app.get('/services', async(req, res)=>{
+app.get('/services', logger,async(req, res)=>{
     const cursor = CarDoctorsDB.find()
     const result = await cursor.toArray()
     res.send(result)
