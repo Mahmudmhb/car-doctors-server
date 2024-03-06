@@ -53,7 +53,7 @@ const verifyToken = async(req, res, next)=>{
     console.log(process.env.ACCESS_TOKEN_SECRET)
     if(err){
       console.log(err)
-      // return res.status(401).send({message: 'unAuthorized'})
+      return res.status(401).send({message: 'unAuthorized'})
     }
     console.log('value in the token', decoded)
     next()
@@ -79,6 +79,7 @@ app.post('/jwt', logger, async(req, res)=>{
   const user = req.body;
   console.log(user)
   const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET,{ expiresIn: '5h' })
+  console.log(token)
  res
  .cookie('token',  token,{
   httpOnly: true,
